@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Project     : SiPM/test
+Author      : Sin-iu Ho <sin-iu.ho(at)student.uni-tuebingen.de>
+Date        : August 27, 2023
+Version     : 1.0
+"""
 import pyvisa
 
 print('SMU test starts.')
