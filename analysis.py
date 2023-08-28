@@ -3,12 +3,12 @@
 """
 Project     : SiPM/analysis
 Author      : Sin-iu Ho <sin-iu.ho(at)student.uni-tuebingen.de>
-Date        : August 27, 2023
+Date        : August 28, 2023
 Version     : 1.3
 Description :
 	- This module analyzes and visualizes the temperature dependence on various electrical properties of SiPM.
-    - The class "IVcurve" contains several methods that relates to the analysis on the I-V curve:
-        - ``addPlot``, ``addScatter``, ``addLegend`` : overlay a plot on the axes.
+    - The class ``IVcurve`` contains several methods that relates to the analysis on the I-V curve:
+        - ``addPlot``, ``addScatter``: overlay a plot on the axes.
         - ``Dln`` : calculate d/dV[ln(I)] or d^2/dV^2[ln(I)].
         - ``Dln`` : find the peaks on the curve of d/dV[ln(I)] or d^2/dV^2[ln(I)] vs. V.
         - ``calcRQ`` : calculate the quenching resistance R_Q.
@@ -16,6 +16,8 @@ Description :
     - The class "IVsegment" is specially designed for the method ``IVcurve.Vbr1``. It segments a pair of data arrays according to some given range and contains two methods of fit the data:
         - ``linfit`` : fit the segmented data into the best linear model.
         - ``polynfit`` : fit the segmented data into the best polynomial model.
+	* New function ``labeler`` and new method ``labl`` under the class ``IVCurve`` deal with the format to be displayed on a legend.
+ 	* New parent class ``Curve`` includes the old ``IVCurve`` and the new ``tTCurve``.
 """
 
 import numpy as np
@@ -27,9 +29,29 @@ from scipy.signal import find_peaks
 from scipy.stats import linregress
 from matplotlib.legend_handler import HandlerLine2D, HandlerTuple
 
+peak_color = "b"
+peak_ls = "--"
+peak_lw = 1
+BL_color = "c"
+WR_color = "orange"
+intersec_marker = "kD"
+intersec_ms = 3
+fit_lw = 0.8
+fit_ls = "-"
+
 #==============================================================================
+def labeler(labelstyle, shortlabel, name):
+	if labelstyle == "short":
+		return shortlabel
+	elif labelstyle == "long":
+		return f"{name} (" + shortlabel + ")"
+	elif labelstyle == "none":
+		return ""
+	else:
+		 raise ValueError("labelstyle can only be 'short', 'long', or 'none'")
+
 class Curve():
-    def __init__(self, xlabel, ylabel, title, yscale, grid=True):
+    def __init__(self, xlabel, ylabel, title, yscale, grid=True, labelstyle="short"):
         """
         Class constructor. Define the attributes "fig" and "ax" while configuring the basic elements of the plot, such as labels for axes and titles.
 
@@ -45,6 +67,12 @@ class Curve():
             The scale of the y-axis. The default is "linear".
         grid : bool, optional  
             Whether to plot the grid lines.
+        labelstyle : {"long", "short", "none"}, optional
+        	Styles of label to display in the legend. The default is ``"short"``.
+        	
+        	    * "long" : label in form of ``self.label (<category>)``
+                * "short" : label in form of ``<category>``
+                * "none" : no label.
         
         Returns
         -------
@@ -57,6 +85,7 @@ class Curve():
         self.ax.set_title(title)
         self.ax.set_yscale(yscale)
         plt.grid(grid, which="both", color="0.9", zorder=1)
+        self.labelstyle = labelstyle
 
     def addLegend(self, outright=True):
         """
@@ -83,368 +112,377 @@ class Curve():
     	self.fig.savefig(name, dpi=200)
 
 class IVcurve(Curve):
-    def __init__(self, xlabel="Voltage [V]", ylabel="Current [A]", title="$I$-$V$ curve", yscale="log"):
-    	Curve.__init__(self, xlabel, ylabel, title, yscale)
-	
-    def setColors(self, fnli):
-        """
-        Use the list of file numbers (fnli) to define a list of colors (cli) that creates a color gradient from black (0, 0, 0) to red (1, 0, 0). 
-        
-        Smaller index in fnli has darker color.
+	def __init__(self, xlabel="Voltage $V$ [V]", ylabel="Current $I$ [A]", title="$I$-$V$ curve", yscale="log"):
+		Curve.__init__(self, xlabel, ylabel, title, yscale)
+			
+	def setColors(self, fnli):
+		"""
+		Use the list of file numbers (fnli) to define a list of colors (cli) that creates a color gradient from black (0, 0, 0) to red (1, 0, 0). 
 
-        Parameters
-        ----------
-        fnli : list of strings
-            List of file numbers.
+		Smaller index in fnli has darker color.
 
-        Returns
-        -------
-        cli: list
-            List of colors in RGB (red, green, blue) tuples of float values.
-        """
-        cli = [((i+1)/len(fnli), 0.0, 0.0) for i in range(len(fnli))]        
-        self.colorset = cli
-        return cli
-    
-    def addPlot(self, vax, iax, color=None, label=""):
-        """
-        Plot the I-V curve without markers. 
-        
-        Also pass the values of parameters to define the attributes "vax", "iax", "label", and "color".
-        
-        Fixed format: 
-            * linestyle = "-" (solid line)
-            * linewidth = 2 
-            * zorder = 3
+		Parameters
+		----------
+		fnli : list of strings
+			List of file numbers.
 
-        Parameters
-        ----------
-        vax : array-like, shape (n, )
-            Voltage data.
-        iax : array-like, shape (n, )
-            Current data.
-        color : array-like or list of colors or color, optional
-            The color of marker. The default is None
-        label : string, optional
-            The label to display in the legend. The default is "".
-        
-        Returns
-        -------
-        None.
-        """
-        self.ax.plot(vax, iax, c=color, lw=2, zorder=3, label=label)
-        self.vax = vax
-        self.iax = iax
-        self.label = label
-        self.color = color
-        
-    def addScatter(self, vax, iax, color=None, label=""):
-        """
-        Plot the I-V curve as a scatter plot. 
-        
-        Also pass the values of parameters to define the attributes "vax", "iax", "label", and "color".
-        
-        Fixed format: 
-            * marker = "." (point marker)
-            * markersize = 10
-            * zorder = 3
-            
-        Parameters
-        ----------
-        vax : array-like, shape (n, )
-            Voltage data.
-        iax : array-like, shape (n, )
-            Current data.
-        c : array-like or list of colors or color, optional
-            The marker colors. Default is None
-        label : string, optional
-            The label to display in the legend. Default is an empty string.
-        
-        Returns
-        -------
-        None.
-        """
-        self.ax.scatter(vax, iax, color=color, marker=".", s=10, zorder=3, label=label)
-        self.vax = vax
-        self.iax = iax
-        self.label = label
-        self.color = color
-    
-    def Dln(self, order=1, plot=False):
-        """
-        Evaluate the first or the second derivative of natural logarithm of current with respect to voltage, i.e. d/dV[ln(I)] or d^2/dV^2[ln(I)].
-        
-        The differentiation is carried out by the functional interface ``derivative.dxdt`` with the method ``FiniteDifference``.
+		Returns
+		-------
+		cli: list
+			List of colors in RGB (red, green, blue) tuples of float values.
+		"""
+		cli = [((i+1)/len(fnli), 0.0, 0.0) for i in range(len(fnli))]        
+		self.colorset = cli
+		return cli
+		
+	def addPlot(self, vax, iax, color=None, name=""):
+		"""
+		Plot the I-V curve without markers. 
 
-        Parameters
-        ----------
-        order : int, optional
-            Order of the derivative. The default is 1.
-        plot : bool, optional
-            Whether to plot the derivative vs. V. The default is False.
+		Also pass the values of parameters to define the attributes "vax", "iax", "label", and "color".
 
-        Returns
-        -------
-        D : array-like, shape (n, )
-            derivative, either d/dV[ln(I)] or d^2/dV^2[ln(I)]
-            
-        Raises
-        ------
-        TypeError 
-            If ``order`` is not an integer.
-        ValueError
-            If ``order`` is neither 1 nor 2.
+		Fixed format: 
+			* linestyle = "-" (solid line)
+			* linewidth = 2 
+			* zorder = 3
+
+		Parameters
+		----------
+		vax : array-like, shape (n, )
+			Voltage data.
+		iax : array-like, shape (n, )
+			Current data.
+		color : array-like or list of colors or color, optional
+			The color of marker. The default is None.
+		name : string
+			The name of data set, e.g. temperature. The default is "".
+
+		Returns
+		-------
+		None.
+		"""
+		self.vax = vax
+		self.iax = iax
+		self.color = color
+		self.name = name
+		self.ax.plot(vax, iax, c=color, lw=2, zorder=3, label=self.labl("data"))
+		 
+	def addScatter(self, vax, iax, color=None, name=""):
+		"""
+		Plot the I-V curve as a scatter plot. 
+
+		Also pass the values of parameters to define the attributes "vax", "iax", "label", and "color".
+
+		Fixed format: 
+			* marker = "." (point marker)
+			* markersize = 10
+			* zorder = 3
+			
+		Parameters
+		----------
+		vax : array-like, shape (n, )
+			Voltage data.
+		iax : array-like, shape (n, )
+			Current data.
+		color : array-like or list of colors or color, optional
+			The marker colors. Default is None.
+		name : string
+			The name of data set, e.g. temperature. The default is "".
+
+		Returns
+		-------
+		None.
+		"""
+		self.vax = vax
+		self.iax = iax
+		self.color = color
+		self.name = name
+		self.ax.scatter(vax, iax, color=color, marker=".", s=10, zorder=3, label=self.labl("data"))
+		
+	def Dln(self, order=1, plot=False):
+		"""
+		Evaluate the first or the second derivative of natural logarithm of current with respect to voltage, i.e. d/dV[ln(I)] or d^2/dV^2[ln(I)].
+
+		The differentiation is carried out by the functional interface ``derivative.dxdt`` with the method ``FiniteDifference``.
+
+		Parameters
+		----------
+		order : int, optional
+			Order of the derivative. The default is 1.
+		plot : bool, optional
+			Whether to plot the derivative vs. V. The default is False.
+
+		Returns
+		-------
+		D : array-like, shape (n, )
+			derivative, either d/dV[ln(I)] or d^2/dV^2[ln(I)]
+			
+		Raises
+		------
+		TypeError 
+			If ``order`` is not an integer.
+		ValueError
+			If ``order`` is neither 1 nor 2.
+
+		References
+		----------
+		.. [derivative.dxdt] https://derivative.readthedocs.io/en/latest/api.html
+		.. [FiniteDifference] https://derivative.readthedocs.io/en/latest/modules.html#finitedifference)
+
+		"""
+		Dlny = dxdt(np.log(self.iax), self.vax, kind="finite_difference", k=1)
+		cdict = {1: "b", 2: "g"}
+		sdict = {1: " 1st deri.", 2: " 2st deri."}
+		if not isinstance(order, int):
+			raise TypeError("order must be an integer.")
+		if order not in [1,2]:
+			raise ValueError("order can only be 1 (first derivative of ln(I)) or 2 (second derivative of ln(I)).")
+		if order==1:
+			D = Dlny
+		if order==2:
+			D = dxdt(Dlny, self.vax, kind="finite_difference", k=1)
+		if plot == True:
+			self.ax.get_yaxis().set_visible(False)
+			self.ax.plot(self.vax, D, c=cdict[order], ls=":", lw=1, zorder=4, label=self.labl(sdict[order]))
+		return D
+		
+	def calcPeak(self, order=1, pltMode=0, pltItems=[]):
+		"""
+		Call the method ``IVcurve.Dln`` to evaluate d/dV[ln(I)] or d^2/dV^2[ln(I)] and find the peaks on that derivative by ``scipy.signal.find_peaks``.
+
+		The conditions for the peak identification (*EMPIRICAL*) include ``height = 2, width = 1``.
+
+		Parameters
+		----------
+		order : int, optional
+			Order of the derivative, which is passed to the method "Dln". The default is 1. Acceptable values are
+			
+				* 1 : find peaks in the 1-d array of d/dV[ln(I)],
+				* 2 : find peaks in the 1-d array of d^2/dV^2[ln(I)]
+		pltMode : int, optional
+			Plotting mode. The default is 0. Acceptable values are
+			
+				* 0 : act on nothing
+				* 1 : act on the first peak
+				* 2 : act on all peaks
+		pltItems : {"vlines", "text"}, optional
+			Items to be displayed on the plot. The default is ``[]``. 
+			Following options are supported,
+			
+				* "vlines" : draw blue dashed vertical lines to indicate peaks
+				* "text" : add a text label next to the the vertical line
+
+		Returns
+		-------
+		first_peak : float or numpy.nan
+			The voltage of the leftmost peak (smallest voltage), which is empirically the position of the breakdown voltage and can 
+			serve as the breakdown voltage V_br or the initial guess in Method 1 for finding V_br. (see `IVcurve.calcVbr1`)
+			
+			If no peaks are found, then it returns numpy.nan (Not a Number).
+
+		Raises
+		------
+		TypeError 
+			If ``pltMode`` is not an integer.
+		ValueError
+			If ``pltMode`` is neither 0 nor 1 nor 2.
+			
+		References
+		----------
+		.. [scipy.signal.find_peaks] https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
+
+		"""
+		D = self.Dln(order, plot=False)
+		peaks, _ = find_peaks(D, height=2, width=1) # height=2, width=1 --> EMPIRICAL value
+
+		if not isinstance(pltMode, int):
+			raise TypeError("pltMode must be an integer.")
+		if pltMode not in [0,1,2]:
+			raise ValueError("pltMode can only be 0 (act on nothing), 1 (act on the first peak) or 2 (act on all peaks).")
+		else:
+			modedict = {0: 0, 1: 1, 2: len(peaks)}
+			
+		for i in range(modedict[pltMode]):
+			if "vlines" in pltItems: # draw blue dashed vertical lines to indicate peaks
+				self.ax.axvline(x = self.vax[peaks[i]], lw=peak_lw, color=peak_color, linestyle=peak_ls, zorder=2, 
+								label = self.labl(f"peak of D$"+f"^{order}[\ln(y)]$")
+								) 
+			if "text" in pltItems: # add a text label next to the the vertical line
+				textx = self.vax[peaks[i]] + 0.25
+				ybottom, ytop = [self.ax.get_ylim()[j] for j in range(2)]
+				texty = ytop * 0.01
+				text  = f"{self.vax[peaks[i]]:.2f} V"
+				self.ax.text(textx, texty, text, rotation = 90)
+		try:
+			first_peak = self.vax[peaks][0]
+		except:
+			first_peak = np.nan
+		return first_peak
+		
+	def calcRQ(self, N, pltItems=[]):
+		"""
+		Perform the linear regression (on the forward-biasing region) and calculates the quenching resistance R_Q of SiPM.
+
+		Parameters
+		----------
+		N : int 
+			Number of microcells of SiPM.
+		pltItems : {"fit", "text"}, optional
+			Items to be displayed on the plot. The default is ``[]``. 
+			Following options are supported,
+			
+				* "fit" : plot the linear fit
+				* "text" : add a text label next to the the vertical line
+
+		Returns
+		-------
+		RQ : string
+			Quenching resistance (in ohm) of the entire SiPM, which is equivalently N quenching resistors in parallel.
+		RQerr : string
+			Uncertainty of the quenching resistance in ohm.
+			
+
+		References
+		----------
+		.. [scipy.stats.linregress]  https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.linregress.html
+		.. [2] https://www.statology.org/standard-error-of-regression-slope/
+
+		"""
+		vax, iax = self.vax, self.iax
+		vslice = vax[np.abs(iax) > np.abs(iax.min()) * 0.1] # slice off the nonlinear part of the I-V curve with current values 0.1 times the maximum --> EMPIRICAL value
+		islice = iax[np.abs(iax) > np.abs(iax.min()) * 0.1] # slice off the nonlinear part of the I-V curve with current values 0.1 times the maximum --> EMPIRICAL value
+		slope, yintercept, r_value, p_value, std_err = linregress(vslice, islice) #
+		vfit = np.linspace(vslice.min(), vslice.max(), len(vslice))
+		ifit = yintercept + slope * vfit
+		#print(slope, intercept, r_value, p_value, std_err)
+		RQ = N * 1/slope #
+		RQerr = N * np.sqrt(1/(len(vslice)-2) * ((islice-ifit)**2).sum() / ((vslice - vslice.mean())**2).sum())
+		
+		if "fit" in pltItems:
+			self.ax.plot(vfit, ifit, color="c", lw=3, zorder=2, label=self.labl("linear fit"))
+		if "text" in pltItems:
+			textx = (vslice.min() + vslice.max())/2 + 0.05 # right to the middle point of the line. 0.05--> EMPIRICAL value
+			texty = (islice.min() + islice.max())/2 - 0.01 # lower to the middle point of the line. 0.01--> EMPIRICAL value
+			text  = f"1/slope = {1/slope:.2f} $\Omega$\n$R_Q = N$/slope = {RQ/1e3:.2f} k$\Omega$\n$r$-value = {r_value:.4f}\nstandard error = {std_err:.4f}"
+			self.ax.text(textx, texty, text, rotation = 0)
+		
+		return RQ, RQerr
         
-        References
-        ----------
-        .. [derivative.dxdt] https://derivative.readthedocs.io/en/latest/api.html
-        .. [FiniteDifference] https://derivative.readthedocs.io/en/latest/modules.html#finitedifference)
+	def calcVbr1(self, color=None, pltItems=[], labellength="short"):
+		"""
+		Calculate the breakdown voltage by finding the intercept of the degree-n fitted polynomial and the "baseline" on semi-log scale. (Intercept method)
 
-        """
-        Dlny = dxdt(np.log(self.iax), self.vax, kind="finite_difference", k=1)
-        cdict = {1: "b", 2: "g"}
-        sdict = {1: " 1st deri.", 2: " 2st deri."}
-        if not isinstance(order, int):
-            raise TypeError("order must be an integer.")
-        if order not in [1,2]:
-            raise ValueError("order can only be 1 (first derivative of ln(I)) or 2 (second derivative of ln(I)).")
-        if order==1:
-            D = Dlny
-        if order==2:
-            D = dxdt(Dlny, self.vax, kind="finite_difference", k=1)
-        if plot == True:
-            self.ax.get_yaxis().set_visible(False)
-            self.ax.plot(self.vax, D, c=cdict[order], ls=":", lw=1, zorder=4, label=self.label + sdict[order])
-        return D    
-    
-    def calcPeak(self, order=1, pltMode=0, pltItems=[]):
-        """
-        Call the method ``IVcurve.Dln`` to evaluate d/dV[ln(I)] or d^2/dV^2[ln(I)] and find the peaks on that derivative by ``scipy.signal.find_peaks``.
-        
-        The conditions for the peak identification (*EMPIRICAL*) include ``height = 2, width = 1``.
+		Parameters
+		----------
+		color : array-like or list of colors or color, optional
+			The color of the plot. The default is None, which will take the same color as the I-V plot.
+		pltItems : {"span", "linfit", "polyfit", "intersect"}, optional
+			Items to be displayed on the plot. The default is ``[]``. 
+			Following options are supported,
+			
+				* "span" : draw the two vertical spans across the x-axis, representing the baseline (left, cyan) and the working range (right, yellow), respectively.
+				* "linfit" : plot the linear fit (without label).
+				* "polyfit" : plot the best polynomial fit.
+				* "intersect" : plot the intersection of the linear fit and the polynomial fit.
 
-        Parameters
-        ----------
-        order : int, optional
-            Order of the derivative, which is passed to the method "Dln". The default is 1. Acceptable values are
-            
-                * 1 : find peaks in the 1-d array of d/dV[ln(I)],
-                * 2 : find peaks in the 1-d array of d^2/dV^2[ln(I)]
-        pltMode : int, optional
-            Plotting mode. The default is 0. Acceptable values are
-            
-                * 0 : act on nothing
-                * 1 : act on the first peak
-                * 2 : act on all peaks
-        pltItems : {"vlines", "text"}, optional
-            Items to be displayed on the plot. The default is ``[]``. 
-            Following options are supported,
-            
-                * "vlines" : draw blue dashed vertical lines to indicate peaks
-                * "text" : add a text label next to the the vertical line
+		Returns
+		-------
+		bestvbr : float
+			Breakdown voltage of the best fit.
+			
+		References
+		----------
+		* (Parabolic fitting) \Z. Li *et al.* (2012). *NIMPR, Section A* **695** pp.222-225. https://doi.org/10.1016/j.nima.2011.12.037
+		* (Parabolic fitting) N. Dinu *et al.* (2017). *NIMPR, Section A* **845** pp.64-68. https://doi.org/10.1016/j.nima.2016.05.110
+		* (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025
+		"""
+		if color == None:
+			color = self.color # Take the same color as the I-V curve.
+		vax, iax = self.vax, self.iax
+		vpeak = self.calcVbr3()  # the initial guess of breakdown voltage given by IVcurve.calcVbr3
+		degrange = np.arange(2,7,1) # Try from Degree 2 (quadratic) to Degree 6 polynomial
 
-        Returns
-        -------
-        first_peak : float or numpy.nan
-            The voltage of the leftmost peak (smallest voltage), which is empirically the position of the breakdown voltage and can 
-            serve as the breakdown voltage V_br or the initial guess in Method 1 for finding V_br. (see `IVcurve.calcVbr1`)
-            
-            If no peaks are found, then it returns numpy.nan (Not a Number).
-        
-        Raises
-        ------
-        TypeError 
-            If ``pltMode`` is not an integer.
-        ValueError
-            If ``pltMode`` is neither 0 nor 1 nor 2.
-            
-        References
-        ----------
-        .. [scipy.signal.find_peaks] https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.find_peaks.html
-        
-        """
-        D = self.Dln(order, plot=False)
-        peaks, _ = find_peaks(D, height=2, width=1) # height=2, width=1 --> EMPIRICAL value
+		# Use vpeak to divide the sequence into two segments: 
+		BL = IVsegment(vax, iax, vax.min(), vpeak-0.2)  # IVsegment left to vpeak: BL (baseline) ; -0.2 (volts) ---> EMPIRICAL
+		WR = IVsegment(vax, iax, vpeak, vax.max()-3)    # IVsegment right to vpeak: WP (working range) ; -3 (volts) ---> EMPIRICAL
+		vfit = BL.xfiner() # volage array with the same endpoints as vax and a finer spacing (num = 1000)
+		_iVpeak = findIndex(vfit, vpeak)[0] # index of vpeak on vfit
+		iBfit = BL.linfit(vfit) # iBfit = linear fit of the baseline
+		smallest_res = 1e9 # EMPIRICAL, typical value < 1e-3
+		best_iWfit = None
+		for deg in degrange:
+			iWfit, res = WR.polynfit(vfit, deg) # iWfit = Degree n polynomial fit -- the working range
+			_iIntersec, vIntersec = BL.intersection(vfit, iBfit, iWfit, _iVpeak) # index and value of the intersection of the two fits
+			disjoint = len(vIntersec) == 0
+			vbr = vIntersec[0] if not disjoint else np.nan
+			#print(deg, res, _iIntersec, vIntersec, iBfit[_iIntersec])
+			
+			if res < smallest_res and not disjoint:
+				smallest_res = res
+				best_iWfit = iWfit
+				bestvbr = vbr
+				bestivbr = iBfit[_iIntersec][0]
+				
+		if "span" in pltItems:
+			cdict = {BL: BL_color, WR: WR_color} # color dict
+			namedict =  {BL: "baseline", WR: "working range"} # segment name
+			for segment in [BL, WR]:
+				plt.axvspan(segment.xmin, segment.xmax, 
+							color=cdict[segment], alpha=0.05, zorder=2, label=self.labl(namedict[segment]))
+		if "linfit" in pltItems:
+			_iBmin, _iBmax = findIndex(vfit, BL.xmin, vpeak+2) # indices of the endpoints of BL on vfit; Note: 2 volts right to vpeak; 2 volt ---> EMPIRICAL
+			vlinfit, ilinfit = vfit[_iBmin:_iBmax], iBfit[_iBmin:_iBmax]
+			plt.plot(vlinfit, ilinfit, c=BL_color, ls=fit_ls, lw=fit_lw, zorder=4, label=self.labl("linear fit"))
+		if "polyfit" in pltItems:
+			_iWmin, _iWmax = findIndex(vfit, WR.xmin, WR.xmax) # indices of the endpoints of WR on vfit
+			vpolyfit, ipolyfit = vfit[_iWmin:_iWmax], best_iWfit[_iWmin:_iWmax]
+			plt.plot(vpolyfit, ipolyfit, c=WR_color, ls=fit_ls, lw=fit_lw, zorder=4, label=self.labl(f"deg-{deg} polynomial fit"))
+		if "intersect" in pltItems:
+			plt.plot(bestvbr, bestivbr, intersec_marker, markersize=intersec_ms, label=self.labl("intersection of two fits"))
 
-        if not isinstance(pltMode, int):
-            raise TypeError("pltMode must be an integer.")
-        if pltMode not in [0,1,2]:
-            raise ValueError("pltMode can only be 0 (act on nothing), 1 (act on the first peak) or 2 (act on all peaks).")
-        else:
-            modedict = {0: 0, 1: 1, 2: len(peaks)}
-            
-        for i in range(modedict[pltMode]):
-            if "vlines" in pltItems: # draw blue dashed vertical lines to indicate peaks
-                self.ax.axvline(x = self.vax[peaks[i]], lw=1, color="b", linestyle="--", zorder=2) 
-            if "text" in pltItems: # add a text label next to the the vertical line
-                textx = self.vax[peaks[i]] + 0.25
-                ybottom, ytop = [self.ax.get_ylim()[j] for j in range(2)]
-                texty = ytop * 0.01
-                text  = f"{self.vax[peaks[i]]:.2f} V"
-                self.ax.text(textx, texty, text, rotation = 90)
-        try:
-            first_peak = self.vax[peaks][0]
-        except:
-            first_peak = np.nan
-        return first_peak
+		return bestvbr
 
-    def calcRQ(self, N, pltItems=[]):
-        """
-        Perform the linear regression (on the forward-biasing region) and calculates the quenching resistance R_Q of SiPM.
-        
-        Parameters
-        ----------
-        N : int 
-            Number of microcells of SiPM.
-        pltItems : {"fit", "text"}, optional
-            Items to be displayed on the plot. The default is ``[]``. 
-            Following options are supported,
-            
-                * "fit" : plot the linear fit
-                * "text" : add a text label next to the the vertical line
-  
-        Returns
-        -------
-        RQ : string
-            Quenching resistance (in ohm) of the entire SiPM, which is equivalently N quenching resistors in parallel.
-        RQerr : string
-            Uncertainty of the quenching resistance in ohm.
-            
+	def calcVbr2(self):
+		"""
+		Calculate the breakdown Voltage V_br by finding the leftmost peak on the curve of d/dV[ln(I)] vs. V. (Relative Derivative Method)
 
-        References
-        ----------
-        .. [scipy.stats.linregress]  https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.linregress.html
-        .. [2] https://www.statology.org/standard-error-of-regression-slope/
+		Returns
+		-------
+		vbr : float
+			Breakdown voltage, in volt.
+			
+		References
+		----------
+		* (Relative derivative) \B. Bonanno et al. (2014). *IEEE Sens. J.* **14** (10) (2014) pp.3567–3578. https://doi.org/10.1109/JSEN.2014.2328623 
+		* (Relative derivative) Hamamatsu MPPC® Technical Note (2022), https://www.hamamatsu.com/content/dam/hamamatsu-photonics/sites/documents/99_SALES_LIBRARY/ssd/mppc_kapd9005e.pdf
+		* (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025 
 
-        """
-        vax, iax = self.vax, self.iax
-        vslice = vax[np.abs(iax) > np.abs(iax.min()) * 0.1] # slice off the nonlinear part of the I-V curve with current values 0.1 times the maximum --> EMPIRICAL value
-        islice = iax[np.abs(iax) > np.abs(iax.min()) * 0.1] # slice off the nonlinear part of the I-V curve with current values 0.1 times the maximum --> EMPIRICAL value
-        slope, yintercept, r_value, p_value, std_err = linregress(vslice, islice) #
-        vfit = np.linspace(vslice.min(), vslice.max(), len(vslice))
-        ifit = yintercept + slope * vfit
-        #print(slope, intercept, r_value, p_value, std_err)
-        RQ = N * 1/slope #
-        RQerr = N * np.sqrt(1/(len(vslice)-2) * ((islice-ifit)**2).sum() / ((vslice - vslice.mean())**2).sum())
-        
-        if "fit" in pltItems:
-            self.ax.plot(vfit, ifit, color="c", lw=3, zorder=2, label=self.label + " (linear fit)")
-        if "text" in pltItems:
-            textx = (vslice.min() + vslice.max())/2 + 0.05 # right to the middle point of the line. 0.05--> EMPIRICAL value
-            texty = (islice.min() + islice.max())/2 - 0.01 # lower to the middle point of the line. 0.01--> EMPIRICAL value
-            text  = f"1/slope = {1/slope:.2f} $\Omega$\n$R_Q = N$/slope = {RQ/1e3:.2f} k$\Omega$\n$r$-value = {r_value:.4f}\nstandard error = {std_err:.4f}"
-            self.ax.text(textx, texty, text, rotation = 0)
-        
-        return RQ, RQerr
-        
-    def calcVbr1(self, color=None, pltItems=[]):
-        """
-        Calculate the breakdown voltage by finding the intercept of the degree-n fitted polynomial and the "baseline" on semi-log scale. (Intercept method)
+		"""
+		vpeak = self.calcPeak(order=1)
+		vbr = vpeak - 0.18 
+		# 0.18 V is the EMPIRICAL difference between the peak voltage found by the Relative Derivative Method and the breakdown voltage V_br.
+		return vbr
+		
+	def calcVbr3(self):
+		"""
+		Calculate the breakdown Voltage V_br by finding the leftmost peak on the curve of d^2/dV^2[ln(I)] vs. V. (Second Derivative Method)
 
-        Parameters
-        ----------
-        color : array-like or list of colors or color, optional
-            The color of the plot. The default is None, which will take the same color as the I-V plot.
-        pltItems : {"span", "linfit", "polyfit", "intersect"}, optional
-            Items to be displayed on the plot. The default is ``[]``. 
-            Following options are supported,
-            
-                * "span" : draw the two vertical spans across the x-axis, representing the baseline (left, cyan) and the working range (right, yellow), respectively.
-                * "linfit" : plot the linear fit (without label).
-                * "polyfit" : plot the best polynomial fit.
-                * "intersect" : plot the intersection of the linear fit and the polynomial fit.
+		Returns
+		-------
+		vbr : float
+			Breakdown voltage, in volt.
+			
+		References
+		----------
+		* (Second derivative) \M. Simonetta *et al.* (2016). *NIMPR, Section A* **824** pp.146-147. https://doi.org/10.1016/j.nima.2015.11.023
+		* (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025
+		"""
+		vpeak = self.calcPeak(order=2)
+		vbr = vpeak
+		return vbr
 
-        Returns
-        -------
-        bestvbr : float
-            Breakdown voltage of the best fit.
-            
-        References
-        ----------
-        * (Parabolic fitting) \Z. Li *et al.* (2012). *NIMPR, Section A* **695** pp.222-225. https://doi.org/10.1016/j.nima.2011.12.037
-        * (Parabolic fitting) N. Dinu *et al.* (2017). *NIMPR, Section A* **845** pp.64-68. https://doi.org/10.1016/j.nima.2016.05.110
-        * (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025
-        """
-        if color == None:
-            color = self.color # Take the same color as the I-V curve.
-        vax, iax = self.vax, self.iax
-        vpeak = self.calcVbr3()  # the initial guess of breakdown voltage given by IVcurve.calcVbr3
-        degrange = np.arange(2,7,1) # Try from Degree 2 (quadratic) to Degree 6 polynomial
-        
-        # Use vpeak to divide the sequence into two segments: 
-        BL = IVsegment(vax, iax, vax.min(), vpeak-0.1)  # IVsegment left to vpeak: BL (baseline) ; -0.2 (volts) ---> EMPIRICAL
-        WR = IVsegment(vax, iax, vpeak, vax.max()-3)    # IVsegment right to vpeak: WP (working range) ; -3 (volts) ---> EMPIRICAL
-        vfit = BL.xfiner() # volage array with the same endpoints as vax and a finer spacing (num = 1000)
-        _iVpeak = findIndex(vfit, vpeak)[0] # index of vpeak on vfit
-        iBfit = BL.linfit(vfit) # iBfit = linear fit of the baseline
-        smallest_res = 1e9 # EMPIRICAL, typical value < 1e-3
-        best_iWfit = None
-        for deg in degrange:
-            iWfit, res = WR.polynfit(vfit, deg) # iWfit = Degree n polynomial fit -- the working range
-            _iIntersec, vIntersec = BL.intersection(vfit, iBfit, iWfit, _iVpeak) # index and value of the intersection of the two fits
-            disjoint = len(vIntersec) == 0
-            vbr = vIntersec[0] if not disjoint else np.nan
-            #print(deg, res, _iIntersec, vIntersec, iBfit[_iIntersec])
-            
-            if res < smallest_res and not disjoint:
-                smallest_res = res
-                best_iWfit = iWfit
-                bestvbr = vbr
-                bestivbr = iBfit[_iIntersec][0]
-                
-        if "span" in pltItems:
-            cdict = {BL: "c", WR: "y"} # color dict
-            for segment in [BL, WR]:
-                plt.axvspan(segment.xmin, segment.xmax, color=cdict[segment], alpha=0.05, zorder=2)
-        if "linfit" in pltItems:
-            _iBmin, _iBmax = findIndex(vfit, BL.xmin, vpeak+2) # indices of the endpoints of BL on vfit; Note: 2 volts right to vpeak; 2 volt ---> EMPIRICAL
-            plt.plot(vfit[_iBmin:_iBmax], iBfit[_iBmin:_iBmax], c='c', ls = "-", lw=.8, zorder=4, label="") #f"{self.label} (linear)"
-        if "polyfit" in pltItems:
-            _iWmin, _iWmax = findIndex(vfit, WR.xmin, WR.xmax) # indices of the endpoints of WR on vfit
-            plt.plot(vfit[_iWmin:_iWmax], best_iWfit[_iWmin:_iWmax], c='orange', ls = "-", lw=.8, zorder=4, label=f"{self.label} (Degree {deg})")
-        if "intersect" in pltItems:
-            plt.plot(bestvbr, bestivbr, 'ko', markersize=3)
-        
-        return bestvbr
-    
-    def calcVbr2(self):
-        """
-        Calculate the breakdown Voltage V_br by finding the leftmost peak on the curve of d/dV[ln(I)] vs. V. (Relative Derivative Method)
-
-        Returns
-        -------
-        vbr : float
-            Breakdown voltage, in volt.
-            
-        References
-        ----------
-        * (Relative derivative) \B. Bonanno et al. (2014). *IEEE Sens. J.* **14** (10) (2014) pp.3567–3578. https://doi.org/10.1109/JSEN.2014.2328623 
-        * (Relative derivative) Hamamatsu MPPC® Technical Note (2022), https://www.hamamatsu.com/content/dam/hamamatsu-photonics/sites/documents/99_SALES_LIBRARY/ssd/mppc_kapd9005e.pdf
-        * (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025 
-    
-        """
-        vpeak = self.calcPeak(order=1)
-        vbr = vpeak - 0.18 
-        # 0.18 V is the EMPIRICAL difference between the peak voltage found by the Relative Derivative Method and the breakdown voltage V_br.
-        return vbr
-    
-    def calcVbr3(self):
-        """
-        Calculate the breakdown Voltage V_br by finding the leftmost peak on the curve of d^2/dV^2[ln(I)] vs. V. (Second Derivative Method)
-
-        Returns
-        -------
-        vbr : float
-            Breakdown voltage, in volt.
-            
-        References
-        ----------
-        * (Second derivative) \M. Simonetta *et al.* (2016). *NIMPR, Section A* **824** pp.146-147. https://doi.org/10.1016/j.nima.2015.11.023
-        * (Summary of methods) \F. Nagy *et al.* (2017). *NIMPR, Section A* **849** pp.55-59. https://linkinghub.elsevier.com/retrieve/pii/S0168900217300025
-        """
-        vpeak = self.calcPeak(order=2)
-        vbr = vpeak
-        return vbr
+	def labl(self, text):
+		return labeler(self.labelstyle, text, self.name)
   
 class IVsegment():  
     def __init__(self, xax, yax, xmin, xmax):
@@ -763,8 +801,7 @@ class tTcurve(Curve):
 		self.ax.plot(data[0], data[1], color=cli[0], ls="-", lw=1, zorder=3, label="T6")
 		self.ax.plot(data[0], data[2], color=cli[1], ls="-", lw=1, zorder=3, label="T7")
 		
-		
-		
+
 #==============================================================================
 
 def findIndex(arr, *values):
