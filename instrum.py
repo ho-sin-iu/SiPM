@@ -5,20 +5,6 @@ Project     : SiPM/instrum
 Author      : Sin-iu Ho <sin-iu.ho(at)student.uni-tuebingen.de>
 Date        : August 28, 2023
 Version     : 1.6
-Description :
-	- This module has several classes that controls the instruments.
-		- class ``SMU``
-		- class ``SerialPort``
-            - subclass ``Controller``
-            - subclass ``Sensor``
-	- The function ``readfile`` can import text file that contains instructions for troubleshooting.
-		- helpIPAddress.txt
-		- helpSerialPermission.txt
-	- Output messages are cateforized into "Error", "Warning", "Info", etc. with formats unified.
-    * New function ``iv_data_parser()`` to parse the string into ``numpy.ndarray``.
-    * New local variable ``command`` in ``SMU.sweep`` and ``SMU.beep``, for debugging.
-    * Change variable name in ``SerialPort.__init__`` from ``name`` to ``port``.
-    * Correct typo and accord the prompt display.
 """
 
 import numpy as np
