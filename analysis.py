@@ -5,19 +5,6 @@ Project     : SiPM/analysis
 Author      : Sin-iu Ho <sin-iu.ho(at)student.uni-tuebingen.de>
 Date        : August 28, 2023
 Version     : 1.3
-Description :
-	- This module analyzes and visualizes the temperature dependence on various electrical properties of SiPM.
-    - The class ``IVcurve`` contains several methods that relates to the analysis on the I-V curve:
-        - ``addPlot``, ``addScatter``: overlay a plot on the axes.
-        - ``Dln`` : calculate d/dV[ln(I)] or d^2/dV^2[ln(I)].
-        - ``Dln`` : find the peaks on the curve of d/dV[ln(I)] or d^2/dV^2[ln(I)] vs. V.
-        - ``calcRQ`` : calculate the quenching resistance R_Q.
-        - ``calcVbr1``, ``calcVbr2``, ``calcVbr3`` : calculate the breakdown voltage V_br.
-    - The class "IVsegment" is specially designed for the method ``IVcurve.Vbr1``. It segments a pair of data arrays according to some given range and contains two methods of fit the data:
-        - ``linfit`` : fit the segmented data into the best linear model.
-        - ``polynfit`` : fit the segmented data into the best polynomial model.
-	* New function ``labeler`` and new method ``labl`` under the class ``IVCurve`` deal with the format to be displayed on a legend.
- 	* New parent class ``Curve`` includes the old ``IVCurve`` and the new ``tTCurve``.
 """
 
 import numpy as np
