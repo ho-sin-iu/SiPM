@@ -3,7 +3,7 @@
 """
 Project     : SiPM/instrum
 Author      : Sin-iu Ho <sin-iu.ho(at)student.uni-tuebingen.de>
-Date        : August 27, 2023
+Date        : August 28, 2023
 Version     : 1.6
 Description :
 	- This module has several classes that controls the instruments.
@@ -15,7 +15,10 @@ Description :
 		- helpIPAddress.txt
 		- helpSerialPermission.txt
 	- Output messages are cateforized into "Error", "Warning", "Info", etc. with formats unified.
-    - debug and optimize (2023-08-27)
+    * New function ``iv_data_parser()`` to parse the string into ``numpy.ndarray``.
+    * New local variable ``command`` in ``SMU.sweep`` and ``SMU.beep``, for debugging.
+    * Change variable name in ``SerialPort.__init__`` from ``name`` to ``port``.
+    * Correct typo and accord the prompt display.
 """
 
 import numpy as np
@@ -100,7 +103,7 @@ class SMU():
 				print(f"Error:   The IP address [{self.address}] is not found!")
 				help = input("Info:    Ask for help? Press 'y' to get possible solutions.")
 				if help == "y":
-					readfile("./troubleshooting/helpIPAddress.txtAddress.txt.txt")
+					readfile("./troubleshooting/helpIPAddress.txt")
 				self.address = input("Info:    Enter another IP address or enter Ctrl+Z to quit.")
 
 	def fullname(self):
@@ -145,7 +148,9 @@ class SMU():
 			pass
 		else:
 			self.instr.write("TSPbeep()") # load the script
-			self.instr.write(f'beep({repeated:d}, "{score:s}")')
+			command = f'beep({repeated:d}, "{score:s}")'
+			# print(command) # debug: do we pass the correct command to the SMU?
+			self.instr.write(command)
 
 	def sweep(self, T, vstart, vstop, vstep, ilimit, trialname, irange="auto", repeated=1):
 		"""
@@ -189,9 +194,11 @@ class SMU():
 
 				# voltage sweep and request the data
 				self.instr.write("TSPsweep()") # load the script
-				self.instr.write(f'sweep({vstart:.2f}, {vstop:.2f}, {vstep:.2f}, {ilimit:.2e}, "{irange:s}", {repeated:d})') # perform voltage sweep
+				command = f'sweep({vstart:.2f}, {vstop:.2f}, {vstep:.2f}, {ilimit:.2e}, "{irange:s}", {repeated:d})'
+				# print(command) # debug: do we pass the correct command to the SMU?
+				self.instr.write(command) # perform voltage sweep
 				data = self.instr.query(f"passData({T:f})") # Request the data from reading buffer
-				data_np = iv_data_parser(data)
+				data_np = iv_data_parser(data) # convert the data format from string to numpy.ndarray 
 				
 				self.beep(2)  # beep twice if completed
 				print("Success: measurement completed.")
@@ -215,32 +222,31 @@ class SMU():
 #===============================================================
 
 class SerialPort():
-	def __init__(self, name, port, baudrate, timeout, displaymode=False, testmode=False):
-		self.name = name
-		self.port = port
+	def __init__(self, port, baudrate, timeout, displaymode=False, testmode=False, name=""):
 		self.ser = None
 		self.displaymode = displaymode
 		self.testmode = testmode
+		self.name = name
 		self.starttime = time.time()
 		self.tT = np.empty((3,0))
 		while self.ser == None:
 			if self.testmode == True:
-				print(f"*** {self.name} in the TEST MODE! ***")
+				print(f"Warning: [{self.name}] in the TEST MODE!")
 				break
 			else:
 				try: # configures the port, baud rate, timeout
-					self.ser = serial.Serial(self.port)
+					self.ser = serial.Serial(port)
 					self.ser.baudrate = baudrate
 					self.ser.timeout = timeout
-					print(f"Success: {self.name} with port at {self.port} installed.")			
+					print(f"Success: [{self.name}] with port at [{port}] installed.")			
 					break
 				except:
 					self.ser = None
-					print(f"Error:   {self.name} at {self.port} is not found!")
+					print(f"Error:   [{self.name}] at [{port}] is not found!")
 					help = input("Info:    Ask for help? Press 'y' to get possible solutions.")
 					if help == "y":
 						readfile("troubleshooting/helpSerialPermission.txt")
-					self.port = input("Info:    Enter another port or enter Ctrl+Z to quit.")
+					port = input("Info:    Enter another port or enter Ctrl+Z to quit.")
 
 	def get_time(self):
 		""" 
@@ -283,7 +289,7 @@ class Controller(SerialPort):
         if self.displaymode == True:
         	print("-" * 62 + f"\nSet temperature to T = {T:.2f} °C")
         if self.testmode == True:
-            print("Warning: Temp. controller is not activated!")
+            print("Warning: the temperature controller is not activated!")
             pass
         else:
             self.ser.write(Tbyte) 
@@ -313,7 +319,7 @@ class Sensor(SerialPort):
 				T = np.nan
 			else:
 				if self.testmode == True: # if the serial port is deactivated 
-					#print(f"Warning: Temp. sensor T{x} is not activated!")
+					#print(f"Warning: the temperature sensor T{x} is not activated!")
 					T = np.random.rand() 
 				else: 
 					self.ser.write(b'tempf? ' + str(x).encode() + b'\r')
@@ -424,7 +430,3 @@ class Sensor(SerialPort):
 			if self.displaymode == True:
 				print(f"    T{x} (ave,{n}) = {Tmean:6.2f} °C ............ {prefix}STABLE")
 		return Tmean
-
-##===============================================================
-
-
