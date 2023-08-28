@@ -781,7 +781,7 @@ class Test():
         return TvsRQ
 
 class tTcurve(Curve):
-	def __init__(self, xlabel="Time [s]", ylabel="Temperature [\u00b0C]", title="Temperature variation", yscale="linear"):
+	def __init__(self, xlabel="Time $t$ [s]", ylabel="Temperature $T$ [\u00b0C]", title="Temperature variation", yscale="linear"):
 		Curve.__init__(self, xlabel, ylabel, title, yscale)
 
 	def plot(self, data, cli=["g","b"]):
