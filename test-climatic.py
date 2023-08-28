@@ -13,7 +13,7 @@ from analysis import *
 #===============================================================
 # SETTINGS
 TrialName = "0828"	# an identifier of the trial, e.g. date
-dispmode = False	# if True, display the real-time status of the system
+dispmode = True	# if True, display the real-time status of the system
 testmode = False	# if True, skip the configuration of the serial ports
 
 # Serial ports
@@ -22,15 +22,15 @@ Tsens_port = {"Mac": "/dev/tty.usbserial-AM01VS5B", "Linux": "/dev/ttyUSB0", "Wi
 Tctrl_port = {"Mac": "/dev/tty.usbserial-14220", "Linux": "/dev/ttyUSB1", "Windows": "COM1"}
 
 # Temperature --- all values are in degree Celsius.
-Tmin = 10.0		# minimum temperature
+Tmin = 0.0		# minimum temperature
 Tmax = 20.0  	# maximun temperature
 Tstep = 2.0     # step in temperature
-Tend = 30.0     # temperature to restore
+Tend = 10.0     # temperature to restore
 Tsetpts = np.arange(Tmin, Tmax, Tstep) # temperature setpoints
 print("Info:    Temperature setpoints:", Tsetpts, "°C")
 
 # Sampling periods
-tP		= .2	# sampling period in second, time between two samplings
+tP		= 60	# sampling period in second, time between two samplings
 Pwait	= 12	# time (in unit of tP) required to wait for the temperature to change until it stabilizes
 Pstab 	= 20	# time (in unit of tP) required to stablize the temperature during the electrical measurements 
 
@@ -75,5 +75,5 @@ tT = tTcurve()
 tT.plot(Tsens.tT)
 tT.addLegend()
 tT.save(TrialName + "-tT-test.png")
-print("Success: Plot saved as " + TrialName + "-tT-test.png")
+print("Success: plot saved as " + TrialName + "-tT-test.png")
 
