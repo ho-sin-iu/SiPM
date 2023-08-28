@@ -54,3 +54,11 @@ Name of the instrument = [Keithley Instruments Inc., Model 2657A, 1422608, 1.1.6
 Press Y to terminate the connection.  y
 Test ends.
 ```
+
+## `test-sweep.py`
+## Older versions
+* This is the extension of older `sweepplot` series.
+* Performs voltage sweep with SMU by the method `SMU.sweep` 
+* Analyzes the $I$-$V$ curve
+
+### 2023-08-27 ()
