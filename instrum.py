@@ -46,8 +46,8 @@ def iv_data_parser(txt):
 	iv = np.empty((2,0))
 	for i, line in enumerate(txt.splitlines()[1:-1]):
 		line_split = line.split('\t') # three strings per line, else: blank line
-		if len(line_split) == 3:
-			iv_pair = np.array([float(line_split[1]), float(line_split[2])])
+		if len(line_split) == 2:
+			iv_pair = np.array([float(line_split[0]), float(line_split[1])])
 			iv = np.column_stack((iv, iv_pair)) # shape = (2,n), col1 = voltage, col2 = current
 	return iv
 
@@ -87,8 +87,8 @@ class SMU():
 			except:
 				self.instr = None
 				print(f"Error:   The IP address [{self.address}] is not found!")
-				help = input("Info:    Ask for help? Press 'y' to get possible solutions.")
-				if help == "y":
+				assist = input("Info:    Ask for help? Press 'y' to get possible solutions.")
+				if assist == "y":
 					readfile("./troubleshooting/helpIPAddress.txt")
 				self.address = input("Info:    Enter another IP address or enter Ctrl+Z to quit.")
 
@@ -138,14 +138,12 @@ class SMU():
 			# print(command) # debug: do we pass the correct command to the SMU?
 			self.instr.write(command)
 
-	def sweep(self, T, vstart, vstop, vstep, ilimit, trialname, irange="auto", repeated=1):
+	def sweep(self, vstart, vstop, vstep, ilimit, irange="auto", repeated=1):
 		"""
 		Writes and saves the script that performs a reverse linear voltage sweep into the SMU
 
 		Parameters
 		----------
-		T : float
-			Temperature setpoint.
 		vstart : float
 			Starting voltage, in volt.
 		vstop : float
@@ -154,8 +152,6 @@ class SMU():
 			Step in voltage, in volt.
 		ilimit : float
 			Current limit (compliance) of the source, in ampere.
-		trialname : str
-			the number or name of the trial, e.g. "001" or "A1" etc.
 		irange : float or string "auto"  
 			Current measurement range; set either to a string value (in ampere) or to "auto" to enable autorange; defalt: "auto".  
 		repeated : int
@@ -183,7 +179,7 @@ class SMU():
 				command = f'sweep({vstart:.2f}, {vstop:.2f}, {vstep:.2f}, {ilimit:.2e}, "{irange:s}", {repeated:d})'
 				# print(command) # debug: do we pass the correct command to the SMU?
 				self.instr.write(command) # perform voltage sweep
-				data = self.instr.query(f"passData({T:f})") # Request the data from reading buffer
+				data = self.instr.query(f"passData()") # Request the data from reading buffer
 				data_np = iv_data_parser(data) # convert the data format from string to numpy.ndarray 
 				
 				self.beep(2)  # beep twice if completed
@@ -208,10 +204,10 @@ class SMU():
 #===============================================================
 
 class SerialPort():
-	def __init__(self, port, baudrate, timeout, displaymode=False, testmode=False, name=""):
+	def __init__(self, port, baudrate, timeout, disp=False, test=False, name=""):
 		self.ser = None
-		self.displaymode = displaymode
-		self.testmode = testmode
+		self.displaymode = disp
+		self.testmode = test
 		self.name = name
 		self.starttime = time.time()
 		self.tT = np.empty((3,0))
@@ -221,16 +217,14 @@ class SerialPort():
 				break
 			else:
 				try: # configures the port, baud rate, timeout
-					self.ser = serial.Serial(port)
-					self.ser.baudrate = baudrate
-					self.ser.timeout = timeout
-					print(f"Success: [{self.name}] with port at [{port}] installed.")			
+					self.ser = serial.Serial(port, baudrate=baudrate, timeout=timeout)
+					print(f"Success: [{self.name}] with port at [{port}] opened.")			
 					break
 				except:
 					self.ser = None
-					print(f"Error:   [{self.name}] at [{port}] is not found!")
-					help = input("Info:    Ask for help? Press 'y' to get possible solutions.")
-					if help == "y":
+					print(f"Error:   [{self.name}] at [{port}] cannot be opened!")
+					assist = input("Info:    Ask for help? Press 'y' to get possible solutions.")
+					if assist == "y":
 						readfile("troubleshooting/helpSerialPermission.txt")
 					port = input("Info:    Enter another port or enter Ctrl+Z to quit.")
 
@@ -251,37 +245,34 @@ class SerialPort():
 		return t
 
 	def close(self):
+		"""Close the serial port."""	
 		if self.testmode == True:
 			pass
 		else:
 			self.ser.close()
 
 class Controller(SerialPort):
-    def set_temp(self, T):
-        """
-        Pass the temperature setpoint to the temperature controller.
-		
+	def set_temp(self, T):
+		"""
+		Pass a temperature setpoint to the temperature controller.
+
 		Parameters
 		--------
 		T : float
 			temperature in °C
-
-		Returns
-		--------
-		None.
 		"""
-        Tbyte = b'set ' + str(T).encode() + b'\r\n'
-        #print(Tbyte)
-        if self.displaymode == True:
-        	print("-" * 62 + f"\nSet temperature to T = {T:.2f} °C")
-        if self.testmode == True:
-            print("Warning: the temperature controller is not activated!")
-            pass
-        else:
-            self.ser.write(Tbyte) 
-            print(Tbyte)
-            self.ser.read(len(Tbyte))
-        return None
+		Tbyte = b'set ' + str(T).encode() + b'\r\n'
+		if self.displaymode == True:
+			print("-" * 62 + f"\nSet temperature to T = {T:.2f} °C")
+		if self.testmode == True:
+			print("Warning: the temperature controller is not activated!")
+			pass
+		else:
+			self.ser.write(Tbyte)  # write the temperature setpoint (as byte data) to the temperature controller
+			# The following 3 lines are for debugging
+			# print(Tbyte) 
+			# Tbyte_len = self.ser.read(len(Tbyte)) # read size byte from the temperature controller
+			# print(Tbyte_len)
 
 class Sensor(SerialPort):
 	def get_temp(self, *X):
